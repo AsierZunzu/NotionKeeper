@@ -45,11 +45,13 @@ public class NotionKeeper {
 		if (Boolean.parseBoolean(DOTENV.get(KEY_RUN_ON_STARTUP, "false"))) {
 			log.info("RUN_ON_STARTUP is enabled, running backup now");
 			runBackup();
+			runCleanup();
 		}
 
 		while (!Thread.currentThread().isInterrupted()) {
 			sleepUntilNextRun(executionTime, schedulingConfig);
 			runBackup();
+			runCleanup();
 		}
 	}
 
@@ -92,13 +94,23 @@ public class NotionKeeper {
 				log.error("Backup failed: could not export Notion file");
 				return;
 			}
-
-			new BackupRetentionManager(DOTENV, notionClient.getDownloadsDirectoryPath()).applyRetentionPolicy();
 			log.info("Backup completed successfully: {}", exportedFile.get().getName());
 		} catch (Exception e) {
 			log.error("Backup failed with exception", e);
 		}
 		log.info("---------------- Backup finished ----------------");
+	}
+
+
+	private static void runCleanup() {
+		log.info("---------------- Starting cleanup ----------------");
+		try {
+			new BackupRetentionManager(DOTENV, notionClient.getDownloadsDirectoryPath()).applyRetentionPolicy();
+			log.info("Cleanup completed successfully.");
+		} catch (Exception e) {
+			log.error("Cleanup failed with exception", e);
+		}
+        log.info("---------------- Cleanup finished ----------------");
 	}
 
 	private static Dotenv initDotenv() {
