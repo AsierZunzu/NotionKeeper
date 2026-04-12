@@ -216,7 +216,12 @@ public class NotionClient {
 				JsonNode errorName = responseJsonNode.get("name");
 				log.error("Error name: {}, error message: {}", errorName, responseJsonNode.get("message"));
 				if (StringUtils.equalsIgnoreCase(errorName.toString(), "UnauthorizedError")) {
-					log.error("UnauthorizedError: seems like your token is not valid anymore. Try to log in to Notion again and replace you old token.");
+					log.error("Your NOTION_TOKEN_V2 is expired or invalid. To fix this:");
+					log.error("  1. Open Notion in your browser and make sure you are logged in");
+					log.error("  2. Open DevTools -> Application -> Cookies -> https://www.notion.so");
+					log.error("  3. Find the 'token_v2' cookie and copy its value");
+					log.error("  4. Update NOTION_TOKEN_V2 in your .env file with the new value");
+					log.error("  5. Restart the application");
 				}
 				return Optional.empty();
 			}
