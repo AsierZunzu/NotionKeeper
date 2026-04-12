@@ -267,49 +267,11 @@ public class NotionClient {
 					continue;
 				}
 
-				// Response structure: recordMap → activity → {id} → value → value → {data}
-				JsonNode activityMapNode = rootNode.path("recordMap").path("activity");
-				if (activityMapNode.isMissingNode() || !activityMapNode.fields().hasNext()) {
-					log.info("'activity' map is missing or empty in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
-					log.debug("Full response body: {}", response.body());
-					continue;
-				}
-				JsonNode activityEntryNode = activityMapNode.fields().next().getValue();
-				JsonNode node = activityEntryNode.path("value").path("value");
-				if (node.isMissingNode()) {
-					log.info("'value.value' field is missing in activity entry. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
-					log.debug("Activity entry: {}", activityEntryNode);
+				Optional<String> downloadUrl = parseNotificationResponseUrl(rootNode, exportTriggerTimestamp, response.body());
+				if (downloadUrl.isEmpty()) {
 					continue;
 				}
 
-				String startTimeText = node.path("start_time").asText();
-				if (startTimeText.isEmpty()) {
-					log.info("'start_time' field is missing in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
-					log.debug("Value node: {}", node);
-					continue;
-				}
-				long notificationStartTimestamp = Long.parseLong(startTimeText);
-
-				// we want the notification newer than the export trigger timestamp
-				// since the Notion response also contains older export trigger notifications
-				if (notificationStartTimestamp < exportTriggerTimestamp) {
-					log.info("The newest export trigger notification is still not in the Notion response. " +
-							"Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
-					continue;
-				}
-				log.info("Found a new export trigger notification in the Notion response. " +
-						"Attempting to extract the download URL. " +
-						"Timestamp of when the export was triggered: {}. " +
-						"Timestamp of the notification: {}", exportTriggerTimestamp, notificationStartTimestamp);
-
-				node = node.path("edits");
-				node = node.get(0);
-				JsonNode exportActivity = node.path("link");
-
-				if (exportActivity.isMissingNode()) {
-					log.info("The download URL is not yet present. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
-					continue;
-				}
 				CookieStore cookieStore = cookieManager.getCookieStore();
 				List<HttpCookie> cookies = cookieStore.getCookies();
 				notionFileToken = cookies
@@ -319,13 +281,55 @@ public class NotionClient {
 						.orElseThrow(IllegalStateException::new)
 						.getValue();
 				log.info("Notion file token {}", notionFileToken);
-				return Optional.of(exportActivity.textValue());
+				return downloadUrl;
 			}
 		}
 		catch (Exception e) {
 			log.error("An exception occurred: ", e);
 		}
 		return Optional.empty();
+	}
+
+	// Package-private for testing
+	Optional<String> parseNotificationResponseUrl(JsonNode rootNode, long exportTriggerTimestamp, String rawBodyForLogging) {
+		JsonNode activityMapNode = rootNode.path("recordMap").path("activity");
+		if (activityMapNode.isMissingNode() || !activityMapNode.fields().hasNext()) {
+			log.info("'activity' map is missing or empty in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+			log.debug("Full response body: {}", rawBodyForLogging);
+			return Optional.empty();
+		}
+		JsonNode activityEntryNode = activityMapNode.fields().next().getValue();
+		JsonNode dataNode = activityEntryNode.path("value").path("value");
+		if (dataNode.isMissingNode()) {
+			log.info("'value.value' field is missing in activity entry. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+			log.debug("Activity entry: {}", activityEntryNode);
+			return Optional.empty();
+		}
+
+		String startTimeText = dataNode.path("start_time").asText();
+		if (startTimeText.isEmpty()) {
+			log.info("'start_time' field is missing in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+			log.debug("Value node: {}", dataNode);
+			return Optional.empty();
+		}
+		long notificationStartTimestamp = Long.parseLong(startTimeText);
+
+		if (notificationStartTimestamp < exportTriggerTimestamp) {
+			log.info("The newest export trigger notification is still not in the Notion response. " +
+					"Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+			return Optional.empty();
+		}
+		log.info("Found a new export trigger notification in the Notion response. " +
+				"Attempting to extract the download URL. " +
+				"Timestamp of when the export was triggered: {}. " +
+				"Timestamp of the notification: {}", exportTriggerTimestamp, notificationStartTimestamp);
+
+		JsonNode linkNode = dataNode.path("edits").get(0).path("link");
+		if (linkNode.isMissingNode()) {
+			log.info("The download URL is not yet present. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+			return Optional.empty();
+		}
+		return Optional.of(linkNode.textValue());
 	}
 
 	private String getTaskJson() {
