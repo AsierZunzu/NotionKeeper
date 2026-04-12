@@ -83,3 +83,9 @@ Just start the service with docker compose and you are good to go:
 ```
 docker compose up -d
 ```
+
+### Build/Run
+Here's a docker build and run oneliner:
+```
+docker run -it --rm --name my-maven-project -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3-eclipse-temurin-25 mvn clean install && docker build --platform linux/amd64 --build-arg PATH_TO_JAR=./target/notion-keeper-1.0-SNAPSHOT.jar .
+```

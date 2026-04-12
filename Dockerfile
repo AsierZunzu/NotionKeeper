@@ -25,8 +25,3 @@ RUN touch /var/log/cron.log
 COPY ./entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
-
-
-### Build/Run
-
-#   docker run -it --rm --name my-maven-project -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.8.6-openjdk-11-slim mvn clean install && docker build --platform linux/amd64 --build-arg PATH_TO_JAR=./target/notion-keeper-1.0-SNAPSHOT.jar .
