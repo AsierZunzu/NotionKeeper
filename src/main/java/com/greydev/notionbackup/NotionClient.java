@@ -260,7 +260,12 @@ public class NotionClient {
 				node = node.fields().next().getValue();
 				node = node.path("value");
 
-				long notificationStartTimestamp = Long.parseLong(node.path("start_time").asText());
+				String startTimeText = node.path("start_time").asText();
+				if (startTimeText.isEmpty()) {
+					log.info("start_time field is missing in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+					continue;
+				}
+				long notificationStartTimestamp = Long.parseLong(startTimeText);
 
 				// we want the notification newer than the export trigger timestamp
 				// since the Notion response also contains older export trigger notifications
