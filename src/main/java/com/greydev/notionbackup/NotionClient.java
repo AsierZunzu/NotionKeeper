@@ -195,14 +195,20 @@ public class NotionClient {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			var statusCode = response.statusCode();
-			if (statusCode == HttpURLConnection.HTTP_BAD_GATEWAY
-					|| statusCode == HttpURLConnection.HTTP_GATEWAY_TIMEOUT) {
-				log.error("Server timeout (HTTP {}). Trying again in {} seconds...",
+			if (statusCode >= 500) {
+				log.error("Server error (HTTP {}). Trying again in {} seconds...",
 						statusCode, TRIGGER_EXPORT_TASK_RETRY_SECONDS);
 				continue;
 			}
 
-			JsonNode responseJsonNode = objectMapper.readTree(response.body());
+			JsonNode responseJsonNode;
+			try {
+				responseJsonNode = objectMapper.readTree(response.body());
+			} catch (Exception e) {
+				log.error("Failed to parse response as JSON (HTTP {}). Trying again in {} seconds...",
+						statusCode, TRIGGER_EXPORT_TASK_RETRY_SECONDS);
+				continue;
+			}
 
 		/*	This will be the response if the given token is not valid anymore (for example if a logout occurred)
 			{
@@ -246,14 +252,20 @@ public class NotionClient {
 				HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 				var statusCode = response.statusCode();
-				if (statusCode == HttpURLConnection.HTTP_BAD_GATEWAY
-						|| statusCode == HttpURLConnection.HTTP_GATEWAY_TIMEOUT) {
-					log.error("Server timeout (HTTP {}). Trying again in {} seconds...",
+				if (statusCode >= 500) {
+					log.error("Server error (HTTP {}). Trying again in {} seconds...",
 							statusCode, FETCH_DOWNLOAD_URL_RETRY_SECONDS);
 					continue;
 				}
 
-				JsonNode rootNode = objectMapper.readTree(response.body());
+				JsonNode rootNode;
+				try {
+					rootNode = objectMapper.readTree(response.body());
+				} catch (Exception e) {
+					log.error("Failed to parse response as JSON (HTTP {}). Trying again in {} seconds...",
+							statusCode, FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+					continue;
+				}
 
 				JsonNode node = rootNode.path("recordMap");
 				node = node.path("activity");
