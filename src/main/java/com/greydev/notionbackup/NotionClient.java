@@ -18,6 +18,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
+import com.greydev.notionbackup.NotionApiContractValidator.ContractViolation;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -219,6 +221,9 @@ public class NotionClient {
 			}
 		 */
 			if (responseJsonNode.get("taskId") == null) {
+				List<ContractViolation> violations = NotionApiContractValidator.validateEnqueueTaskResponse(responseJsonNode);
+				NotionApiContractValidator.logViolations("enqueueTask", violations);
+
 				JsonNode errorName = responseJsonNode.get("name");
 				log.error("Error name: {}, error message: {}", errorName, responseJsonNode.get("message"));
 				if (StringUtils.equalsIgnoreCase(errorName.toString(), "UnauthorizedError")) {
@@ -266,6 +271,9 @@ public class NotionClient {
 							statusCode, FETCH_DOWNLOAD_URL_RETRY_SECONDS);
 					continue;
 				}
+
+				List<ContractViolation> violations = NotionApiContractValidator.validateNotificationResponse(rootNode);
+				NotionApiContractValidator.logViolations("getNotificationLogV2", violations);
 
 				Optional<String> downloadUrl = parseNotificationResponseUrl(rootNode, exportTriggerTimestamp, response.body());
 				if (downloadUrl.isEmpty()) {
