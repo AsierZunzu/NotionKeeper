@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 
+import org.apache.commons.lang3.StringUtils;
+
 import com.cronutils.model.Cron;
 import com.cronutils.model.CronType;
 import com.cronutils.model.definition.CronDefinitionBuilder;
@@ -20,6 +22,46 @@ public class NotionKeeper {
 
 	private static final String KEY_SCHEDULING_CONFIG = "SCHEDULING_CONFIG";
 	private static final String KEY_RUN_ON_STARTUP = "RUN_ON_STARTUP";
+	private static final String KEY_NOTION_SPACE_ID = "NOTION_SPACE_ID";
+	private static final String KEY_NOTION_TOKEN_V2 = "NOTION_TOKEN_V2";
+	private static final String KEY_NOTION_EXPORT_TYPE = "NOTION_EXPORT_TYPE";
+	private static final String KEY_NOTION_FLATTEN_EXPORT_FILETREE = "NOTION_FLATTEN_EXPORT_FILETREE";
+	private static final String KEY_NOTION_EXPORT_COMMENTS = "NOTION_EXPORT_COMMENTS";
+	private static final String KEY_DOWNLOADS_DIRECTORY_PATH = "DOWNLOADS_DIRECTORY_PATH";
+	private static final String DEFAULT_NOTION_EXPORT_TYPE = "markdown";
+	private static final boolean DEFAULT_NOTION_FLATTEN_EXPORT_FILETREE = false;
+	private static final boolean DEFAULT_NOTION_EXPORT_COMMENTS = true;
+	private static final String DEFAULT_DOWNLOADS_PATH = "/downloads";
+
+	static String resolveDownloadsPath(Dotenv dotenv) {
+		String path = dotenv.get(KEY_DOWNLOADS_DIRECTORY_PATH);
+		if (StringUtils.isBlank(path)) {
+			log.info("{} is not set. Downloads will be saved to: {}", KEY_DOWNLOADS_DIRECTORY_PATH, DEFAULT_DOWNLOADS_PATH);
+			return DEFAULT_DOWNLOADS_PATH;
+		}
+		return path;
+	}
+
+	private static NotionClient createNotionClient(Dotenv dotenv) {
+		String spaceId = dotenv.get(KEY_NOTION_SPACE_ID);
+		String tokenV2 = dotenv.get(KEY_NOTION_TOKEN_V2);
+		if (StringUtils.isBlank(spaceId)) {
+			log.error("{} is missing!", KEY_NOTION_SPACE_ID);
+			System.exit(1);
+		}
+		if (StringUtils.isBlank(tokenV2)) {
+			log.error("{} is missing!", KEY_NOTION_TOKEN_V2);
+			System.exit(1);
+		}
+		String downloadsPath = resolveDownloadsPath(dotenv);
+		String exportType = StringUtils.isNotBlank(dotenv.get(KEY_NOTION_EXPORT_TYPE))
+				? dotenv.get(KEY_NOTION_EXPORT_TYPE) : DEFAULT_NOTION_EXPORT_TYPE;
+		boolean flattenExportFileTree = StringUtils.isNotBlank(dotenv.get(KEY_NOTION_FLATTEN_EXPORT_FILETREE))
+				? Boolean.parseBoolean(dotenv.get(KEY_NOTION_FLATTEN_EXPORT_FILETREE)) : DEFAULT_NOTION_FLATTEN_EXPORT_FILETREE;
+		boolean exportComments = StringUtils.isNotBlank(dotenv.get(KEY_NOTION_EXPORT_COMMENTS))
+				? Boolean.parseBoolean(dotenv.get(KEY_NOTION_EXPORT_COMMENTS)) : DEFAULT_NOTION_EXPORT_COMMENTS;
+		return new NotionClient(spaceId, tokenV2, downloadsPath, exportType, flattenExportFileTree, exportComments);
+	}
 
 	private static final Dotenv DOTENV;
 
@@ -87,9 +129,7 @@ public class NotionKeeper {
 	private static void runBackup() {
 		log.info("---------------- Starting backup ----------------");
 		try {
-			NotionClient notionClient = new NotionClient(DOTENV);
-
-			Optional<File> exportedFile = notionClient.export();
+			Optional<File> exportedFile = createNotionClient(DOTENV).export();
 			if (exportedFile.isEmpty()) {
 				log.error("Backup failed: could not export Notion file");
 				return;
@@ -105,7 +145,8 @@ public class NotionKeeper {
 	private static void runCleanup() {
 		log.info("---------------- Starting cleanup ----------------");
 		try {
-			new BackupRetentionManager(DOTENV, notionClient.getDownloadsDirectoryPath()).applyRetentionPolicy();
+		    String downloadsPath = resolveDownloadsPath(DOTENV);
+			new BackupRetentionManager(DOTENV, downloadsPath).applyRetentionPolicy();
 			log.info("Cleanup completed successfully.");
 		} catch (Exception e) {
 			log.error("Cleanup failed with exception", e);

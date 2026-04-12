@@ -51,35 +51,29 @@ class NotionClientTest {
 
 	@BeforeEach
 	void setUp() {
-		when(dotenv.get("NOTION_SPACE_ID")).thenReturn("test-space-id");
-		when(dotenv.get("NOTION_TOKEN_V2")).thenReturn("test-token-v2");
-		client = new NotionClient(dotenv);
+		client = new NotionClient("test-space-id", "test-token-v2", "/downloads", "markdown", false, true);
 	}
 
-	// --- constructor tests ---
+	// --- resolveDownloadsPath tests ---
 
 	@Test
-	public void constructor_givenNullDownloadsPath_usesDefaultPath() {
+	public void resolveDownloadsPath_givenNullDownloadsPath_usesDefaultPath() {
 		// dotenv.get("DOWNLOADS_DIRECTORY_PATH") returns null (Mockito default)
-		assertEquals("/downloads", client.getDownloadsDirectoryPath());
+		assertEquals("/downloads", NotionKeeper.resolveDownloadsPath(dotenv));
 	}
 
 	@Test
-	public void constructor_givenBlankDownloadsPath_usesDefaultPath() {
+	public void resolveDownloadsPath_givenBlankDownloadsPath_usesDefaultPath() {
 		when(dotenv.get("DOWNLOADS_DIRECTORY_PATH")).thenReturn("   ");
 
-		NotionClient clientWithBlankPath = new NotionClient(dotenv);
-
-		assertEquals("/downloads", clientWithBlankPath.getDownloadsDirectoryPath());
+		assertEquals("/downloads", NotionKeeper.resolveDownloadsPath(dotenv));
 	}
 
 	@Test
-	public void constructor_givenCustomDownloadsPath_usesCustomPath() {
+	public void resolveDownloadsPath_givenCustomDownloadsPath_usesCustomPath() {
 		when(dotenv.get("DOWNLOADS_DIRECTORY_PATH")).thenReturn("/custom/backup/path");
 
-		NotionClient clientWithCustomPath = new NotionClient(dotenv);
-
-		assertEquals("/custom/backup/path", clientWithCustomPath.getDownloadsDirectoryPath());
+		assertEquals("/custom/backup/path", NotionKeeper.resolveDownloadsPath(dotenv));
 	}
 
 	// --- parseNotificationResponseUrl tests ---

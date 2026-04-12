@@ -26,7 +26,6 @@ import org.apache.commons.lang3.StringUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import lombok.extern.slf4j.Slf4j;
 
 
@@ -43,16 +42,6 @@ public class NotionClient {
 	private static final String EXPORT_FILE_NAME = "notion-export";
 	private static final String EXPORT_FILE_EXTENSION = ".zip";
 
-	private static final String KEY_DOWNLOADS_DIRECTORY_PATH = "DOWNLOADS_DIRECTORY_PATH";
-	private static final String KEY_NOTION_SPACE_ID = "NOTION_SPACE_ID";
-	private static final String KEY_NOTION_TOKEN_V2 = "NOTION_TOKEN_V2";
-	private static final String KEY_NOTION_EXPORT_TYPE = "NOTION_EXPORT_TYPE";
-	private static final String KEY_NOTION_FLATTEN_EXPORT_FILETREE = "NOTION_FLATTEN_EXPORT_FILETREE";
-	private static final String KEY_NOTION_EXPORT_COMMENTS = "NOTION_EXPORT_COMMENTS";
-	private static final String DEFAULT_NOTION_EXPORT_TYPE = "markdown";
-	private static final boolean DEFAULT_NOTION_FLATTEN_EXPORT_FILETREE = false;
-	private static final boolean DEFAULT_NOTION_EXPORT_COMMENTS = true;
-	private static final String DEFAULT_DOWNLOADS_PATH = "/downloads";
 
 	private final String notionSpaceId;
 	private final String notionTokenV2;
@@ -63,66 +52,43 @@ public class NotionClient {
 	private final HttpClient client;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 	private String notionFileToken;
-	private String downloadsDirectoryPath;
+	private final String downloadsDirectoryPath;
 
 
-	NotionClient(Dotenv dotenv) {
+	NotionClient(
+	    String notionSpaceId,
+	    String notionTokenV2,
+	    String downloadsDirectoryPath,
+        String exportType,
+        boolean flattenExportFileTree,
+        boolean exportComments
+     ) {
 		this.cookieManager = new CookieManager();
 		this.cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
 		this.client = HttpClient.newBuilder().cookieHandler(this.cookieManager).build();
 
-		// both environment variables and variables defined in the .env file can be accessed this way
-		notionSpaceId = dotenv.get(KEY_NOTION_SPACE_ID);
-		notionTokenV2 = dotenv.get(KEY_NOTION_TOKEN_V2);
-		downloadsDirectoryPath = dotenv.get(KEY_DOWNLOADS_DIRECTORY_PATH);
+		this.notionSpaceId = notionSpaceId;
+		this.notionTokenV2 = notionTokenV2;
+		this.downloadsDirectoryPath = downloadsDirectoryPath;
+		this.exportType = exportType;
+		this.flattenExportFileTree = flattenExportFileTree;
+		this.exportComments = exportComments;
 
-		if (StringUtils.isBlank(downloadsDirectoryPath)) {
-			log.info("{} is not set. Downloads will be saved to: {} ", KEY_DOWNLOADS_DIRECTORY_PATH, DEFAULT_DOWNLOADS_PATH);
-			downloadsDirectoryPath = DEFAULT_DOWNLOADS_PATH;
-		} else {
-			log.info("Downloads will be saved to: {} ", downloadsDirectoryPath);
-		}
-
-		exportType = StringUtils.isNotBlank(dotenv.get(KEY_NOTION_EXPORT_TYPE)) ? dotenv.get(KEY_NOTION_EXPORT_TYPE) : DEFAULT_NOTION_EXPORT_TYPE;
-		flattenExportFileTree = StringUtils.isNotBlank(dotenv.get(KEY_NOTION_FLATTEN_EXPORT_FILETREE)) ?
-				Boolean.parseBoolean(dotenv.get(KEY_NOTION_FLATTEN_EXPORT_FILETREE)) :
-				DEFAULT_NOTION_FLATTEN_EXPORT_FILETREE;
-		exportComments = StringUtils.isNotBlank(dotenv.get(KEY_NOTION_EXPORT_COMMENTS)) ?
-				Boolean.parseBoolean(dotenv.get(KEY_NOTION_EXPORT_COMMENTS)) :
-				DEFAULT_NOTION_EXPORT_COMMENTS;
-
-		exitIfRequiredEnvVariablesNotValid();
-
+		log.info("Downloads will be saved to: {}", downloadsDirectoryPath);
 		log.info("Using export type: {}", exportType);
 		log.info("Flatten export file tree: {}", flattenExportFileTree);
 		log.info("Export comments: {}", exportComments);
 	}
 
 
-	private void exitIfRequiredEnvVariablesNotValid() {
-		if (StringUtils.isBlank(notionSpaceId)) {
-			exit(KEY_NOTION_SPACE_ID + " is missing!");
-		}
-		if (StringUtils.isBlank(notionTokenV2)) {
-			exit(KEY_NOTION_TOKEN_V2 + " is missing!");
-		}
-	}
-
-	public String getDownloadsDirectoryPath() {
-		return downloadsDirectoryPath;
-	}
-
 	public Optional<File> export() {
 		try {
 			long exportTriggerTimestamp = System.currentTimeMillis();
-			// TODO - taskId is not really needed anymore
-			Optional<String> taskId = triggerExportTask();
-
-			if (taskId.isEmpty()) {
-				log.info("taskId could not be extracted");
+			if (!triggerExportTask()) {
+				log.info("Export task could not be triggered");
 				return Optional.empty();
 			}
-			log.info("taskId extracted");
+			log.info("Export task triggered");
 
 			Optional<String> downloadLink = fetchDownloadUrl(exportTriggerTimestamp);
 			if (downloadLink.isEmpty()) {
@@ -185,7 +151,7 @@ public class NotionClient {
 		}
 	}
 
-	private Optional<String> triggerExportTask() throws IOException, InterruptedException {
+	private boolean triggerExportTask() throws IOException, InterruptedException {
 		for (int i = 0; i < 500; i++, sleep(TRIGGER_EXPORT_TASK_RETRY_SECONDS)) {
 			HttpRequest request = HttpRequest.newBuilder()
 					.uri(URI.create(ENQUEUE_ENDPOINT))
@@ -234,12 +200,12 @@ public class NotionClient {
 					log.error("  4. Update NOTION_TOKEN_V2 in your .env file with the new value");
 					log.error("  5. Restart the application");
 				}
-				return Optional.empty();
+				return false;
 			}
 
-			return Optional.of(responseJsonNode.get("taskId").asText());
+			return true;
 		}
-		return Optional.empty();
+		return false;
 	}
 
 	private Optional<String> fetchDownloadUrl(long exportTriggerTimestamp) throws IOException, InterruptedException {
@@ -367,11 +333,6 @@ public class NotionClient {
 				"  \"variant\": \"no_grouping\"" +
 				"}";
 		return String.format(notificationJsonTemplate, notionSpaceId);
-	}
-
-	private void exit(String message) {
-		log.error(message);
-		System.exit(1);
 	}
 
 	private void sleep(int seconds) {
