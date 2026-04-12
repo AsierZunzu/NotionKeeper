@@ -267,14 +267,25 @@ public class NotionClient {
 					continue;
 				}
 
-				JsonNode node = rootNode.path("recordMap");
-				node = node.path("activity");
-				node = node.fields().next().getValue();
-				node = node.path("value");
+				// Response structure: recordMap → activity → {id} → value → value → {data}
+				JsonNode activityMapNode = rootNode.path("recordMap").path("activity");
+				if (activityMapNode.isMissingNode() || !activityMapNode.fields().hasNext()) {
+					log.info("'activity' map is missing or empty in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+					log.debug("Full response body: {}", response.body());
+					continue;
+				}
+				JsonNode activityEntryNode = activityMapNode.fields().next().getValue();
+				JsonNode node = activityEntryNode.path("value").path("value");
+				if (node.isMissingNode()) {
+					log.info("'value.value' field is missing in activity entry. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+					log.debug("Activity entry: {}", activityEntryNode);
+					continue;
+				}
 
 				String startTimeText = node.path("start_time").asText();
 				if (startTimeText.isEmpty()) {
 					log.info("'start_time' field is missing in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+					log.debug("Value node: {}", node);
 					continue;
 				}
 				long notificationStartTimestamp = Long.parseLong(startTimeText);
