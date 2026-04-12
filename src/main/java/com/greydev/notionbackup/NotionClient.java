@@ -262,7 +262,7 @@ public class NotionClient {
 
 				String startTimeText = node.path("start_time").asText();
 				if (startTimeText.isEmpty()) {
-					log.info("start_time field is missing in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
+					log.info("'start_time' field is missing in response. Trying again in {} seconds...", FETCH_DOWNLOAD_URL_RETRY_SECONDS);
 					continue;
 				}
 				long notificationStartTimestamp = Long.parseLong(startTimeText);
