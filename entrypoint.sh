@@ -2,7 +2,7 @@
 
 # dump ENV variables to /etc/environment so cron can inherit them
 printenv | grep -v "no_proxy" >> /etc/environment
-crontabContent=$(printf "%s root bash -l -c '/usr/local/openjdk-11/bin/java -jar /notion-keeper.jar' >> /var/log/cron.log 2>&1\n" "$SCHEDULING_CONFIG")
+crontabContent=$(printf "%s root bash -l -c 'java -jar /notion-keeper.jar' >> /var/log/cron.log 2>&1\n" "$SCHEDULING_CONFIG")
 if ! echo "$crontabContent" | crontab > /dev/null 2>&1; then
     echo "The env variable SCHEDULING_CONFIG does not contain a proper CRON syntax. Value was: $SCHEDULING_CONFIG"
     exit 1
