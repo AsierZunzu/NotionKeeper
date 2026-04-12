@@ -70,8 +70,8 @@ Copy `.env.dist` to `.env` to get started.
 
 ### Multi-stage Docker Build
 
-- **Build stage**: `maven:3.8.6-openjdk-11-slim` compiles the fat JAR
-- **Runtime stage**: `openjdk:11` + `cron` package; JAR copied from build stage
+- **Build stage**: `maven:3-eclipse-temurin-25` compiles the fat JAR
+- **Runtime stage**: `eclipse-temurin:25-jdk` + `cron` package; JAR copied from build stage
 
 ### CI/CD
 
