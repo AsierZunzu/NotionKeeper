@@ -1,4 +1,4 @@
-FROM maven:3-eclipse-temurin-25 AS build
+FROM maven:3-eclipse-temurin-26 AS build
 
 COPY ./pom.xml /usr/src/mymaven/pom.xml
 COPY ./checkstyle.xml /usr/src/mymaven/checkstyle.xml
