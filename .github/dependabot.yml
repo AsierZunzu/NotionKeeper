@@ -4,13 +4,22 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: saturday
+      time: "10:00"
+      timezone: Europe/Madrid
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: saturday
+      time: "10:00"
+      timezone: Europe/Madrid
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: saturday
+      time: "10:00"
+      timezone: Europe/Madrid
