@@ -28,6 +28,8 @@ public class NotionKeeper {
 	private static final String KEY_NOTION_FLATTEN_EXPORT_FILETREE = "NOTION_FLATTEN_EXPORT_FILETREE";
 	private static final String KEY_NOTION_EXPORT_COMMENTS = "NOTION_EXPORT_COMMENTS";
 	private static final String KEY_DOWNLOADS_DIRECTORY_PATH = "DOWNLOADS_DIRECTORY_PATH";
+	private static final String KEY_NOTION_EXPORT_TIMEOUT_MINUTES = "NOTION_EXPORT_TIMEOUT_MINUTES";
+	private static final long DEFAULT_NOTION_EXPORT_TIMEOUT_MINUTES = 720;
 	private static final String DEFAULT_NOTION_EXPORT_TYPE = "markdown";
 	private static final boolean DEFAULT_NOTION_FLATTEN_EXPORT_FILETREE = false;
 	private static final boolean DEFAULT_NOTION_EXPORT_COMMENTS = true;
@@ -40,6 +42,24 @@ public class NotionKeeper {
 			return DEFAULT_DOWNLOADS_PATH;
 		}
 		return path;
+	}
+
+	static Duration resolveExportTimeout(Dotenv dotenv) {
+		String value = dotenv.get(KEY_NOTION_EXPORT_TIMEOUT_MINUTES);
+		if (StringUtils.isBlank(value)) {
+			return Duration.ofMinutes(DEFAULT_NOTION_EXPORT_TIMEOUT_MINUTES);
+		}
+		try {
+			long minutes = Long.parseLong(value.trim());
+			if (minutes > 0) {
+				return Duration.ofMinutes(minutes);
+			}
+		} catch (NumberFormatException e) {
+			// fall through to warning below
+		}
+		log.warn("{} must be a positive whole number of minutes, but was '{}'. Using default of {} minutes.",
+				KEY_NOTION_EXPORT_TIMEOUT_MINUTES, value, DEFAULT_NOTION_EXPORT_TIMEOUT_MINUTES);
+		return Duration.ofMinutes(DEFAULT_NOTION_EXPORT_TIMEOUT_MINUTES);
 	}
 
 	private static NotionClient createNotionClient(Dotenv dotenv) {
@@ -60,7 +80,8 @@ public class NotionKeeper {
 				? Boolean.parseBoolean(dotenv.get(KEY_NOTION_FLATTEN_EXPORT_FILETREE)) : DEFAULT_NOTION_FLATTEN_EXPORT_FILETREE;
 		boolean exportComments = StringUtils.isNotBlank(dotenv.get(KEY_NOTION_EXPORT_COMMENTS))
 				? Boolean.parseBoolean(dotenv.get(KEY_NOTION_EXPORT_COMMENTS)) : DEFAULT_NOTION_EXPORT_COMMENTS;
-		return new NotionClient(spaceId, tokenV2, downloadsPath, exportType, flattenExportFileTree, exportComments);
+		return new NotionClient(spaceId, tokenV2, downloadsPath, exportType, flattenExportFileTree, exportComments,
+				resolveExportTimeout(dotenv));
 	}
 
 	private static final Dotenv DOTENV;
