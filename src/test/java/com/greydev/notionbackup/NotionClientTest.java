@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,7 +52,7 @@ class NotionClientTest {
 
 	@BeforeEach
 	void setUp() {
-		client = new NotionClient("test-space-id", "test-token-v2", "/downloads", "markdown", false, true);
+		client = new NotionClient("test-space-id", "test-token-v2", "/downloads", "markdown", false, true, Duration.ofMinutes(720));
 	}
 
 	// --- resolveDownloadsPath tests ---
@@ -126,6 +127,100 @@ class NotionClientTest {
 		Optional<String> result = client.parseNotificationResponseUrl(rootNode, TRIGGER_TIMESTAMP_BEFORE, noLink);
 
 		assertTrue(result.isEmpty());
+	}
+
+	@Test
+	public void parseNotificationResponseUrl_givenEmptyEdits_returnsEmptyWithoutException() throws Exception {
+		String emptyEdits = "{\"recordMap\":{\"activity\":{\"id1\":{\"value\":{\"value\":{" +
+				"\"type\":\"export-completed\",\"start_time\":\"" + MOCK_START_TIME + "\",\"edits\":[]}}}}}}";
+		JsonNode rootNode = objectMapper.readTree(emptyEdits);
+
+		Optional<String> result = client.parseNotificationResponseUrl(rootNode, TRIGGER_TIMESTAMP_BEFORE, emptyEdits);
+
+		assertTrue(result.isEmpty());
+	}
+
+	@Test
+	public void parseNotificationResponseUrl_givenOtherActivityFirst_stillFindsExport() throws Exception {
+		String mixed = "{\"recordMap\":{\"activity\":{" +
+				"\"a\":{\"value\":{\"value\":{\"type\":\"user-mentioned\",\"start_time\":\"" + (MOCK_START_TIME + 10) + "\"," +
+				"\"edits\":[{\"type\":\"block-edited\"}]}}}," +
+				"\"b\":{\"value\":{\"value\":{\"type\":\"export-completed\",\"start_time\":\"" + MOCK_START_TIME + "\"," +
+				"\"edits\":[{\"link\":\"" + MOCK_DOWNLOAD_URL + "\"}]}}}}}}";
+		JsonNode rootNode = objectMapper.readTree(mixed);
+
+		Optional<String> result = client.parseNotificationResponseUrl(rootNode, TRIGGER_TIMESTAMP_BEFORE, mixed);
+
+		assertEquals(Optional.of(MOCK_DOWNLOAD_URL), result);
+	}
+
+	@Test
+	public void parseNotificationResponseUrl_givenSeveralNewExports_returnsNewest() throws Exception {
+		String older = "https://file.notion.so/older.zip";
+		String newer = "https://file.notion.so/newer.zip";
+		String two = "{\"recordMap\":{\"activity\":{" +
+				"\"a\":{\"value\":{\"value\":{\"type\":\"export-completed\",\"start_time\":\"" + MOCK_START_TIME + "\"," +
+				"\"edits\":[{\"link\":\"" + older + "\"}]}}}," +
+				"\"b\":{\"value\":{\"value\":{\"type\":\"export-completed\",\"start_time\":\"" + (MOCK_START_TIME + 60_000) + "\"," +
+				"\"edits\":[{\"link\":\"" + newer + "\"}]}}}}}}";
+		JsonNode rootNode = objectMapper.readTree(two);
+
+		Optional<String> result = client.parseNotificationResponseUrl(rootNode, TRIGGER_TIMESTAMP_BEFORE, two);
+
+		assertEquals(Optional.of(newer), result);
+	}
+
+	// --- nextPollInterval tests ---
+
+	@Test
+	public void nextPollInterval_atStart_pollsFast() {
+		assertEquals(Duration.ofSeconds(30), NotionClient.nextPollInterval(0, Duration.ZERO));
+		assertEquals(Duration.ofSeconds(30), NotionClient.nextPollInterval(100, Duration.ofMinutes(9)));
+	}
+
+	@Test
+	public void nextPollInterval_afterFastPhase_slowsDown() {
+		assertEquals(Duration.ofSeconds(90), NotionClient.nextPollInterval(120, Duration.ofMinutes(10)));
+		assertEquals(Duration.ofSeconds(90), NotionClient.nextPollInterval(200, Duration.ofMinutes(59)));
+	}
+
+	@Test
+	public void nextPollInterval_afterMediumPhase_usesCap() {
+		assertEquals(Duration.ofMinutes(5), NotionClient.nextPollInterval(220, Duration.ofMinutes(60)));
+		assertEquals(Duration.ofMinutes(5), NotionClient.nextPollInterval(Integer.MAX_VALUE, Duration.ofDays(3)));
+	}
+
+	@Test
+	public void nextPollInterval_isPositiveNonDecreasingAndCapped() {
+		Duration previous = Duration.ZERO;
+		for (long minute = 0; minute <= 24 * 60; minute++) {
+			Duration interval = NotionClient.nextPollInterval((int) minute, Duration.ofMinutes(minute));
+			assertTrue(interval.isPositive(), "interval must be positive at minute " + minute);
+			assertTrue(interval.compareTo(previous) >= 0, "interval must not shrink at minute " + minute);
+			assertTrue(interval.compareTo(NotionClient.MAX_POLL_INTERVAL) <= 0, "interval exceeds cap at minute " + minute);
+			previous = interval;
+		}
+	}
+
+	// --- resolveExportTimeout tests ---
+
+	@Test
+	public void resolveExportTimeout_givenNoValue_usesDefault() {
+		assertEquals(Duration.ofMinutes(720), NotionKeeper.resolveExportTimeout(dotenv));
+	}
+
+	@Test
+	public void resolveExportTimeout_givenValidValue_usesIt() {
+		when(dotenv.get("NOTION_EXPORT_TIMEOUT_MINUTES")).thenReturn("90");
+
+		assertEquals(Duration.ofMinutes(90), NotionKeeper.resolveExportTimeout(dotenv));
+	}
+
+	@Test
+	public void resolveExportTimeout_givenInvalidValue_usesDefault() {
+		when(dotenv.get("NOTION_EXPORT_TIMEOUT_MINUTES")).thenReturn("-5");
+
+		assertEquals(Duration.ofMinutes(720), NotionKeeper.resolveExportTimeout(dotenv));
 	}
 
 }
