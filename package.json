@@ -1,0 +1,26 @@
+{
+  "name": "notion-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Exports Notion workspaces on a cron schedule and saves them locally",
+  "type": "module",
+  "main": "src/notionKeeper.ts",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "start": "node src/notionKeeper.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "lint": "eslint . && tsc"
+  },
+  "dependencies": {
+    "cron-parser": "5.10.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "eslint": "10.15.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0"
+  }
+}

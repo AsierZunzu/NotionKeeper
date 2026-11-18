@@ -17,15 +17,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v6.2.0
+      - name: Set up Node.js 26
+        uses: actions/setup-node@v7.1.0
         with:
-          java-version: '25'
-          distribution: 'temurin'
-          cache: maven
+          node-version: '26'
+          cache: npm
 
-      - name: Run Checkstyle
-        run: mvn checkstyle:check
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint and type-check
+        run: npm run lint
 
   test:
     runs-on: ubuntu-latest
@@ -34,15 +36,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v6.2.0
+      - name: Set up Node.js 26
+        uses: actions/setup-node@v7.1.0
         with:
-          java-version: '25'
-          distribution: 'temurin'
-          cache: maven
+          node-version: '26'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run tests
-        run: mvn test
+        run: npm test
 
   publish:
     runs-on: ubuntu-latest

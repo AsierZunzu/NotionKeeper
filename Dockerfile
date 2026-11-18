@@ -1,19 +1,14 @@
-FROM maven:3-eclipse-temurin-27 AS build
+FROM node:26-slim
 
-COPY ./pom.xml /usr/src/mymaven/pom.xml
-COPY ./checkstyle.xml /usr/src/mymaven/checkstyle.xml
-COPY ./src /usr/src/mymaven/src
-WORKDIR /usr/src/mymaven
+ENV NODE_ENV=production
 
-RUN mvn clean install
+WORKDIR /app
 
-FROM eclipse-temurin:25-jdk
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-WORKDIR /
+COPY src ./src
 
-RUN mkdir /downloads
-RUN chmod 755 /downloads
+RUN mkdir /downloads && chmod 755 /downloads
 
-COPY --from=build /usr/src/mymaven/target/notion-keeper-1.0-SNAPSHOT.jar /notion-keeper.jar
-
-ENTRYPOINT ["java", "-jar", "/notion-keeper.jar"]
+ENTRYPOINT ["node", "/app/src/notionKeeper.ts"]
