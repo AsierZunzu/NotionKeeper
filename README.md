@@ -33,17 +33,18 @@ Example outcome with daily backups after one year (default values):
 
 ## Testing
 
-Tests are written with [JUnit 5](https://junit.org/junit5/), [Mockito](https://site.mockito.org/), and [AssertJ](https://assertj.github.io/doc/). Run them locally with:
+Tests use the built-in [Node.js test runner](https://nodejs.org/api/test.html) (`node:test` + `node:assert`). Run them locally with:
 
 ```bash
-mvn test
+npm ci
+npm test
 ```
 
 Tests run automatically on every push and pull request via the **Test** GitHub Actions workflow.
 
 ### What is tested
 
-`BackupRetentionManager` is covered by unit tests that exercise every retention rule in isolation as well as combined:
+`BackupRetentionManager` (`src/backupRetentionManager.ts`) is covered by unit tests that exercise every retention rule in isolation as well as combined:
 
 | Test scenario | What it verifies |
 |---|---|
@@ -61,21 +62,21 @@ Tests run automatically on every push and pull request via the **Test** GitHub A
 | Negative env var value | Falls back to the default for that rule |
 | All rules combined | Each window contributes distinct files; file outside every window is deleted |
 
+The Notion client (`src/notionClient.ts`) is tested against a fake Notion API: the full export flow (cookies, polling, download), retries on server errors / non-JSON responses, an invalid token, a missing `file_token` cookie and download failures. The cron parsing and the API contract validator have their own tests too.
+
 ## Code style
 
-This project uses [Checkstyle](https://checkstyle.org/) to enforce a consistent code style. The rules are defined in [`checkstyle.xml`](checkstyle.xml) and cover:
+The project is written in TypeScript and runs directly on Node.js 26 (native type stripping, no build step). [ESLint](https://eslint.org/) with [typescript-eslint](https://typescript-eslint.io/) enforces a consistent style ([`eslint.config.js`](eslint.config.js)) and `tsc` type-checks the code in strict mode:
 
-- No wildcard or unused imports
-- Standard Java naming conventions (types, constants, methods, variables)
-- All control structures must use braces
-- No empty `catch` blocks (unless the variable is named `expected` or `ignore`)
-- One statement per line
-- Miscellaneous best-practice rules (`StringLiteralEquality`, `SimplifyBooleanReturn`, `FallThrough`, …)
+- Mandatory braces on all control structures, strict equality, no empty `catch` blocks
+- Standard naming conventions (PascalCase types, camelCase functions and variables, UPPER_CASE constants)
+- One statement per line, `default` comes last, no switch fall-through
+- Files end with a newline
 
-Checkstyle runs automatically on every push and pull request via the **Lint** GitHub Actions workflow. It also runs locally as part of the Maven build during the `validate` phase, so any violation will fail `mvn install` too:
+Lint runs automatically on every push and pull request via the **lint** GitHub Actions job. Run it locally with:
 
 ```bash
-mvn checkstyle:check
+npm run lint
 ```
 
 ## Run the service
@@ -85,7 +86,14 @@ docker compose up -d
 ```
 
 ### Build/Run
-Here's a docker build and run oneliner:
+Build the image and run it locally:
 ```
-docker run -it --rm --name my-maven-project -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3-eclipse-temurin-25 mvn clean install && docker build --platform linux/amd64 --build-arg PATH_TO_JAR=./target/notion-keeper-1.0-SNAPSHOT.jar .
+docker build -t notion-keeper .
+docker run --rm --env-file .env -v "$(pwd)/backups:/downloads" notion-keeper
+```
+
+Or run it without Docker (requires Node.js 26+ and a `.env` file in the working directory):
+```
+npm ci --omit=dev
+npm start
 ```
