@@ -9,6 +9,7 @@ An updated `.env.dist` file is provided with the original project's variables (s
 Follow the instructions at [README -> Set Credentials](https://github.com/jckleiner/notion-backup?tab=readme-ov-file#set-credentials) and add:
 * `BACKUP_PATH` to set where do you want your backup files to be stored
 * `SCHEDULING_CONFIG` to set the scheduling interval. Check out [this link](https://en.wikipedia.org/wiki/Cron) for more information on the format
+* `PUID` / `PGID` (optional, default `1000`) to set the user and group the container runs as. On start it takes ownership of the backup directory, so existing backups written by older, root-running versions keep being cleaned up by the retention policy
 
 ## Backup retention
 
