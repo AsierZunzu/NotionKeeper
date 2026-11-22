@@ -34,6 +34,17 @@ export interface Schedule {
   nextExecution(from: Date): Date;
 }
 
+/** Seams for tests; every default is the real implementation. */
+export interface MainDependencies {
+  now?: () => Date;
+  sleep?: (ms: number) => Promise<void>;
+  createNotionClient?: (...args: ConstructorParameters<typeof NotionClient>) => Pick<NotionClient, 'export'>;
+  createRetentionManager?: (env: Env, downloadsPath: string) => Pick<BackupRetentionManager, 'applyRetentionPolicy'>;
+  exit?: (code: number) => never;
+}
+
+type ResolvedDependencies = Required<MainDependencies>;
+
 export function resolveDownloadsPath(env: Env): string {
   const downloadsPath = env.get(KEY_DOWNLOADS_DIRECTORY_PATH);
   if (downloadsPath === undefined || isBlank(downloadsPath)) {
@@ -65,22 +76,22 @@ export function parseSchedule(schedulingConfig: string): Schedule {
   };
 }
 
-function createNotionClient(env: Env): NotionClient {
+function createNotionClient(env: Env, deps: ResolvedDependencies): Pick<NotionClient, 'export'> {
   const spaceId = env.get(KEY_NOTION_SPACE_ID);
   const tokenV2 = env.get(KEY_NOTION_TOKEN_V2);
   if (spaceId === undefined || isBlank(spaceId)) {
     log.error('{} is missing!', KEY_NOTION_SPACE_ID);
-    process.exit(1);
+    deps.exit(1);
   }
   if (tokenV2 === undefined || isBlank(tokenV2)) {
     log.error('{} is missing!', KEY_NOTION_TOKEN_V2);
-    process.exit(1);
+    deps.exit(1);
   }
   const downloadsPath = resolveDownloadsPath(env);
   const exportType = env.get(KEY_NOTION_EXPORT_TYPE);
   const flattenExportFileTree = env.get(KEY_NOTION_FLATTEN_EXPORT_FILETREE);
   const exportComments = env.get(KEY_NOTION_EXPORT_COMMENTS);
-  return new NotionClient(
+  return deps.createNotionClient(
     spaceId,
     tokenV2,
     downloadsPath,
@@ -104,8 +115,8 @@ function formatZonedDateTime(date: Date): string {
     + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${offset}[${zone}]`;
 }
 
-async function sleepUntilNextRun(schedule: Schedule): Promise<void> {
-  const now = new Date();
+async function sleepUntilNextRun(schedule: Schedule, deps: ResolvedDependencies): Promise<void> {
+  const now = deps.now();
   const next = schedule.nextExecution(now);
 
   log.info('Next backup scheduled at: {}', formatZonedDateTime(next));
@@ -113,15 +124,15 @@ async function sleepUntilNextRun(schedule: Schedule): Promise<void> {
   let remaining = next.getTime() - now.getTime();
   while (remaining > 0) {
     const chunk = Math.min(remaining, MAX_TIMER_DELAY_MS);
-    await delay(chunk);
+    await deps.sleep(chunk);
     remaining -= chunk;
   }
 }
 
-async function runBackup(env: Env): Promise<void> {
+async function runBackup(env: Env, deps: ResolvedDependencies): Promise<void> {
   log.info('---------------- Starting backup ----------------');
   try {
-    const exportedFile = await createNotionClient(env).export();
+    const exportedFile = await createNotionClient(env, deps).export();
     if (exportedFile === undefined) {
       log.error('Backup failed: could not export Notion file');
       return;
@@ -133,11 +144,11 @@ async function runBackup(env: Env): Promise<void> {
   log.info('---------------- Backup finished ----------------');
 }
 
-function runCleanup(env: Env): void {
+function runCleanup(env: Env, deps: ResolvedDependencies): void {
   log.info('---------------- Starting cleanup ----------------');
   try {
     const downloadsPath = resolveDownloadsPath(env);
-    new BackupRetentionManager(env, downloadsPath).applyRetentionPolicy();
+    deps.createRetentionManager(env, downloadsPath).applyRetentionPolicy();
     log.info('Cleanup completed successfully.');
   } catch (e) {
     log.error('Cleanup failed with exception', e);
@@ -145,14 +156,23 @@ function runCleanup(env: Env): void {
   log.info('---------------- Cleanup finished ----------------');
 }
 
-export async function main(env: Env): Promise<void> {
+export async function main(env: Env, dependencies: MainDependencies = {}): Promise<void> {
+  const deps: ResolvedDependencies = {
+    now: dependencies.now ?? (() => new Date()),
+    sleep: dependencies.sleep ?? ((ms) => delay(ms)),
+    createNotionClient: dependencies.createNotionClient ?? ((...args) => new NotionClient(...args)),
+    createRetentionManager: dependencies.createRetentionManager
+      ?? ((retentionEnv, downloadsPath) => new BackupRetentionManager(retentionEnv, downloadsPath)),
+    exit: dependencies.exit ?? ((code) => process.exit(code)),
+  };
+
   log.info('---------------- Starting NotionKeeper ----------------');
 
   // Exit promptly on `docker stop` / Ctrl+C (Node running as PID 1 ignores signals without handlers)
   for (const [signal, code] of [['SIGTERM', 143], ['SIGINT', 130]] as const) {
     process.on(signal, () => {
       log.info('Scheduler interrupted, shutting down');
-      process.exit(code);
+      deps.exit(code);
     });
   }
 
@@ -162,21 +182,21 @@ export async function main(env: Env): Promise<void> {
     schedule = parseSchedule(schedulingConfig);
   } catch (e) {
     log.error((e as Error).message);
-    process.exit(1);
+    deps.exit(1);
   }
 
   log.info("Scheduling backup with cron syntax '{}'", schedulingConfig);
 
   if (parseBoolean(env.get(KEY_RUN_ON_STARTUP) ?? 'false')) {
     log.info('RUN_ON_STARTUP is enabled, running backup now');
-    await runBackup(env);
-    runCleanup(env);
+    await runBackup(env, deps);
+    runCleanup(env, deps);
   }
 
   for (;;) {
-    await sleepUntilNextRun(schedule);
-    await runBackup(env);
-    runCleanup(env);
+    await sleepUntilNextRun(schedule, deps);
+    await runBackup(env, deps);
+    runCleanup(env, deps);
   }
 }
 
